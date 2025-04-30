@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -13,18 +14,24 @@ local textButton = Instance.new("TextButton")
 textButton.Name = "LockButton"
 textButton.Size = UDim2.new(0, 200, 0, 50)
 textButton.Position = UDim2.new(0.5, -100, 0.5, -25)
-textButton.Text = "Dug"
-textButton.BackgroundColor3 = Color3.fromRGB(0, 0, 127)
-textButton.TextColor3 = Color3.new(0, 0, 0.498039)
-textButton.Font = Enum.Font.Oswald
-textButton.TextSize = 50
+textButton.Text = "Lock Camera"
+textButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+textButton.TextColor3 = Color3.new(1, 1, 1)
+textButton.Font = Enum.Font.SourceSans
+textButton.TextSize = 24
 textButton.Active = true
 textButton.Draggable = true
 textButton.Parent = screenGui
 
+-- Add rounded corners
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 12)
+uiCorner.Parent = textButton
+
 -- State
 local isLocked = false
 local lockedTarget = nil
+local connection = nil
 
 -- Function to find nearest player
 local function getNearestPlayer()
@@ -47,28 +54,36 @@ local function getNearestPlayer()
 	return closestPlayer
 end
 
--- Click handler
+-- Click to toggle camera lock
 textButton.MouseButton1Click:Connect(function()
 	if not isLocked then
-		local targetPlayer = getNearestPlayer()
-		if targetPlayer and targetPlayer.Character then
-			Camera.CameraSubject = targetPlayer.Character:FindFirstChild("Humanoid")
-			isLocked = true
-			lockedTarget = targetPlayer
+		local target = getNearestPlayer()
+		if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+			lockedTarget = target
+			Camera.CameraType = Enum.CameraType.Scriptable
 			textButton.Text = "Unlock Camera"
-			print("Locked camera to:", targetPlayer.Name)
+			print("Locked camera on: " .. target.Name)
+
+			connection = RunService.RenderStepped:Connect(function()
+				if lockedTarget and lockedTarget.Character and lockedTarget.Character:FindFirstChild("HumanoidRootPart") then
+					local root = lockedTarget.Character.HumanoidRootPart
+					local offset = Vector3.new(0, 5, -12) -- Position the camera behind and above
+					Camera.CFrame = CFrame.new(root.Position + offset, root.Position)
+				end
+			end)
+
+			isLocked = true
 		else
-			print("No player nearby to lock on.")
+			print("No nearby player to follow.")
 		end
 	else
-		Camera.CameraSubject = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-		isLocked = false
+		-- Unlock camera
+		if connection then connection:Disconnect() end
+		Camera.CameraType = Enum.CameraType.Custom
 		textButton.Text = "Lock Camera"
 		print("Camera unlocked.")
+		isLocked = false
+		lockedTarget = nil
 	end
 end)
 
--- Add UICorner to make button rounded
-local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 12) -- Adjust roundness here
-uiCorner.Parent = textButton
