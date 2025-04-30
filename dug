@@ -1,164 +1,69 @@
--- Configuration
-getgenv().Bate = {
+-- CONFIGURATION
+getgenv().AimbotSettings = {
     Enabled = true,
-    Prediction = {
-        Amount = 0.30,
-        Smoothness = {
-            Enabled = true,
-            Amount = 1.5,
-            Shake = 4
-        }
-    }
+    AimKey = Enum.UserInputType.MouseButton2, -- Right-click
+    Prediction = 0.15,
+    Smoothness = 0.12
 }
 
--- Toggles (default)
-getgenv().Toggles = {
-    AntiGroundShots = true,
-    AutoAir = true,
-    AutoReload = true,
-    JumpOffset = true,
-    FakeHitbox = true,
-    Shake = true,
-    TargetInfo = true,
-    NoSlowDown = true
-}
-
--- Services
+-- SERVICES
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
+local Camera = workspace.CurrentCamera
 
--- Reusable functions
-local function FindNearestEnemy()
-    local Closest, Distance = nil, math.huge
-    for _, Player in ipairs(Players:GetPlayers()) do
-        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild("Head") then
-            local Humanoid = Player.Character:FindFirstChild("Humanoid")
-            if Humanoid and Humanoid.Health > 0 then
-                local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Player.Character.Head.Position)
-                if OnScreen then
-                    local Dist = (LocalPlayer.Character.HumanoidRootPart.Position - Player.Character.Head.Position).Magnitude
-                    if Dist < Distance then
-                        Distance = Dist
-                        Closest = Player.Character.Head
-                    end
+-- STATE
+local AimbotOn = false
+local Target = nil
+
+-- FUNCTIONS
+local function GetClosestPlayer()
+    local closestDistance = math.huge
+    local closestPlayer = nil
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local head = player.Character:FindFirstChild("Head")
+            local screenPoint, onScreen = Camera:WorldToViewportPoint(head.Position)
+            if onScreen then
+                local distance = (Vector2.new(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y) - Vector2.new(screenPoint.X, screenPoint.Y)).Magnitude
+                if distance < closestDistance then
+                    closestDistance = distance
+                    closestPlayer = player
                 end
             end
         end
     end
-    return Closest
+
+    return closestPlayer
 end
 
-local function AutoReload()
-    if not getgenv().Toggles.AutoReload then return end
-    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-    if tool and tool:FindFirstChild("Ammo") and tool.Ammo.Value <= 0 then
-        tool:Activate()
-        task.wait(2)
-        tool:Deactivate()
-    end
-end
-
-local function NoSlowDown()
-    if not getgenv().Toggles.NoSlowDown then return end
-    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-    local speed = (tool and tool:FindFirstChild("Ammo") and tool.Ammo.Value > 0) and 32 or 16
-    LocalPlayer.Character.Humanoid.WalkSpeed = speed
-end
-
-local function JumpOffset(target)
-    if getgenv().Toggles.JumpOffset and target.Position.Y > LocalPlayer.Character.HumanoidRootPart.Position.Y then
-        target.Velocity = Vector3.new(0, 50, 0)
-    end
-end
-
-local fakeHitbox = nil
-local function EnableFakeHitbox()
-    if not getgenv().Toggles.FakeHitbox then return end
-    if fakeHitbox then return end
-    fakeHitbox = Instance.new("Part")
-    fakeHitbox.Name = "FakeHitbox"
-    fakeHitbox.Size = Vector3.new(5, 7, 5)
-    fakeHitbox.Transparency = 1
-    fakeHitbox.Anchored = true
-    fakeHitbox.CanCollide = false
-    fakeHitbox.Position = LocalPlayer.Character.HumanoidRootPart.Position
-    fakeHitbox.Parent = workspace
-
-    RunService.Heartbeat:Connect(function()
-        if fakeHitbox and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            fakeHitbox.Position = LocalPlayer.Character.HumanoidRootPart.Position
+-- AIMBOT LOOP
+RunService.RenderStepped:Connect(function()
+    if AimbotOn and Target and Target.Character and Target.Character:FindFirstChild("HumanoidRootPart") then
+        local head = Target.Character:FindFirstChild("Head")
+        if head then
+            local predictedPosition = head.Position + (head.Velocity * getgenv().AimbotSettings.Prediction)
+            local direction = (predictedPosition - Camera.CFrame.Position).Unit
+            local newCF = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + direction)
+            Camera.CFrame = Camera.CFrame:Lerp(newCF, getgenv().AimbotSettings.Smoothness)
         end
-    end)
-end
-
-local function DisableFakeHitbox()
-    if fakeHitbox then
-        fakeHitbox:Destroy()
-        fakeHitbox = nil
-    end
-end
-
-local function ApplyShake(camera, intensity)
-    local shake = function() return (math.random() - 0.5) * intensity end
-    camera.CFrame = camera.CFrame * CFrame.new(shake(), shake(), shake())
-end
-
--- Camlock logic
-local Camlock = {
-    State = false,
-    Enemy = nil
-}
-
-RunService.Heartbeat:Connect(function()
-    AutoReload()
-    NoSlowDown()
-
-    if Camlock.State and Camlock.Enemy and Camlock.Enemy:IsDescendantOf(workspace) then
-        local predicted = Camlock.Enemy.Position + Camlock.Enemy.Velocity * getgenv().Bate.Prediction.Amount
-        local newCFrame = CFrame.new(Camera.CFrame.Position, predicted)
-        Camera.CFrame = newCFrame
-
-        if getgenv().Toggles.Shake then
-            ApplyShake(Camera, getgenv().Bate.Prediction.Smoothness.Shake)
-        end
-        if getgenv().Toggles.JumpOffset then
-            JumpOffset(Camlock.Enemy)
-        end
-    elseif Camlock.State then
-        Camlock.Enemy = FindNearestEnemy()
     end
 end)
 
--- GUI
-local gui = Instance.new("ScreenGui", game.CoreGui)
-gui.Name = "AimbotGUI"
+-- INPUT HANDLING
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed and input.UserInputType == getgenv().AimbotSettings.AimKey then
+        AimbotOn = true
+        Target = GetClosestPlayer()
+    end
+end)
 
-local button = Instance.new("TextButton")
-button.Size = UDim2.new(0, 180, 0, 50)
-button.Position = UDim2.new(0.5, -90, 0.8, 0)
-button.Text = "Toggle Camlock"
-button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-button.TextColor3 = Color3.new(1, 1, 1)
-button.Font = Enum.Font.GothamBold
-button.TextSize = 22
-button.Draggable = true
-button.Parent = gui
-
-local corner = Instance.new("UICorner", button)
-corner.CornerRadius = UDim.new(0, 12)
-
-button.MouseButton1Click:Connect(function()
-    Camlock.State = not Camlock.State
-    button.Text = Camlock.State and "Camlock ON" or "Camlock OFF"
-
-    if Camlock.State then
-        Camlock.Enemy = FindNearestEnemy()
-        EnableFakeHitbox()
-    else
-        DisableFakeHitbox()
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == getgenv().AimbotSettings.AimKey then
+        AimbotOn = false
+        Target = nil
     end
 end)
 
