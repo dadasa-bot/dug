@@ -1,0 +1,74 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CameraLockGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Create TextButton
+local textButton = Instance.new("TextButton")
+textButton.Name = "LockButton"
+textButton.Size = UDim2.new(0, 200, 0, 50)
+textButton.Position = UDim2.new(0.5, -100, 0.5, -25)
+textButton.Text = "Dug"
+textButton.BackgroundColor3 = Color3.fromRGB(0, 0, 127)
+textButton.TextColor3 = Color3.new(0, 0, 0.498039)
+textButton.Font = Enum.Font.Oswald
+textButton.TextSize = 50
+textButton.Active = true
+textButton.Draggable = true
+textButton.Parent = screenGui
+
+-- State
+local isLocked = false
+local lockedTarget = nil
+
+-- Function to find nearest player
+local function getNearestPlayer()
+	local myChar = LocalPlayer.Character
+	if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+
+	local closestPlayer = nil
+	local closestDistance = math.huge
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local dist = (player.Character.HumanoidRootPart.Position - myChar.HumanoidRootPart.Position).Magnitude
+			if dist < closestDistance then
+				closestDistance = dist
+				closestPlayer = player
+			end
+		end
+	end
+
+	return closestPlayer
+end
+
+-- Click handler
+textButton.MouseButton1Click:Connect(function()
+	if not isLocked then
+		local targetPlayer = getNearestPlayer()
+		if targetPlayer and targetPlayer.Character then
+			Camera.CameraSubject = targetPlayer.Character:FindFirstChild("Humanoid")
+			isLocked = true
+			lockedTarget = targetPlayer
+			textButton.Text = "Unlock Camera"
+			print("Locked camera to:", targetPlayer.Name)
+		else
+			print("No player nearby to lock on.")
+		end
+	else
+		Camera.CameraSubject = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+		isLocked = false
+		textButton.Text = "Lock Camera"
+		print("Camera unlocked.")
+	end
+end)
+
+-- Add UICorner to make button rounded
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 12) -- Adjust roundness here
+uiCorner.Parent = textButton
