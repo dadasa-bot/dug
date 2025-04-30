@@ -1,108 +1,164 @@
+-- Configuration
+getgenv().Bate = {
+    Enabled = true,
+    Prediction = {
+        Amount = 0.30,
+        Smoothness = {
+            Enabled = true,
+            Amount = 1.5,
+            Shake = 4
+        }
+    }
+}
+
+-- Toggles (default)
+getgenv().Toggles = {
+    AntiGroundShots = true,
+    AutoAir = true,
+    AutoReload = true,
+    JumpOffset = true,
+    FakeHitbox = true,
+    Shake = true,
+    TargetInfo = true,
+    NoSlowDown = true
+}
+
+-- Services
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
-
 local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+local Camera = Workspace.CurrentCamera
 
--- UI Setup
-local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-screenGui.Name = "AimbotLockGUI"
-screenGui.ResetOnSpawn = false
-
-local textButton = Instance.new("TextButton")
-textButton.Size = UDim2.new(0, 200, 0, 50)
-textButton.Position = UDim2.new(0.5, -100, 0.9, -25)
-textButton.Text = "Lock Aimbot"
-textButton.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
-textButton.TextColor3 = Color3.new(1, 1, 1)
-textButton.Font = Enum.Font.SourceSansBold
-textButton.TextSize = 22
-textButton.Draggable = true
-textButton.Parent = screenGui
-
-local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 12)
-uiCorner.Parent = textButton
-
--- Aimbot State
-local isAimbotOn = false
-local aimbotConnection = nil
-
--- SETTINGS
-local predictionTime = 0.2
-local smoothingSpeed = 0.1
-local maxAimbotRange = 100 -- Maximum range for aimbot (meters)
-local maxFOV = math.rad(60) -- Field of view for aimbot targeting (optional)
-
--- Function to check if the player is an enemy
-local function isEnemy(targetPlayer)
-    return targetPlayer.Team ~= LocalPlayer.Team
-end
-
--- Find nearest enemy player within range and FOV
-local function getNearestEnemy()
-    local myChar = LocalPlayer.Character
-    if not myChar or not myChar:FindFirstChild("Head") then return nil end
-
-    local myPos = myChar.Head.Position
-    local closest = nil
-    local shortestDist = math.huge
-
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and isEnemy(player) then
-            local head = player.Character.Head
-            local dist = (myPos - head.Position).Magnitude
-
-            -- Check if the player is within the max range and FOV
-            local directionToTarget = (head.Position - myPos).unit
-            local cameraDirection = Camera.CFrame.LookVector
-
-            local angle = math.acos(cameraDirection:Dot(directionToTarget))
-            if dist < shortestDist and angle < maxFOV and dist < maxAimbotRange then
-                shortestDist = dist
-                closest = player
+-- Reusable functions
+local function FindNearestEnemy()
+    local Closest, Distance = nil, math.huge
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild("Head") then
+            local Humanoid = Player.Character:FindFirstChild("Humanoid")
+            if Humanoid and Humanoid.Health > 0 then
+                local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Player.Character.Head.Position)
+                if OnScreen then
+                    local Dist = (LocalPlayer.Character.HumanoidRootPart.Position - Player.Character.Head.Position).Magnitude
+                    if Dist < Distance then
+                        Distance = Dist
+                        Closest = Player.Character.Head
+                    end
+                end
             end
         end
     end
-
-    return closest
+    return Closest
 end
 
--- Toggle Aimbot with Button
-textButton.MouseButton1Click:Connect(function()
-    isAimbotOn = not isAimbotOn
+local function AutoReload()
+    if not getgenv().Toggles.AutoReload then return end
+    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+    if tool and tool:FindFirstChild("Ammo") and tool.Ammo.Value <= 0 then
+        tool:Activate()
+        task.wait(2)
+        tool:Deactivate()
+    end
+end
 
-    if isAimbotOn then
-        textButton.Text = "Unlock Aimbot"
-        print("Aimbot ON")
+local function NoSlowDown()
+    if not getgenv().Toggles.NoSlowDown then return end
+    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+    local speed = (tool and tool:FindFirstChild("Ammo") and tool.Ammo.Value > 0) and 32 or 16
+    LocalPlayer.Character.Humanoid.WalkSpeed = speed
+end
 
-        aimbotConnection = RunService.RenderStepped:Connect(function()
-            local target = getNearestEnemy()
-            local char = LocalPlayer.Character
+local function JumpOffset(target)
+    if getgenv().Toggles.JumpOffset and target.Position.Y > LocalPlayer.Character.HumanoidRootPart.Position.Y then
+        target.Velocity = Vector3.new(0, 50, 0)
+    end
+end
 
-            if target and target.Character and target.Character:FindFirstChild("Head") and char and char:FindFirstChild("Head") then
-                local myHead = char.Head
-                local targetHead = target.Character.Head
-                local targetVelocity = targetHead.Velocity
+local fakeHitbox = nil
+local function EnableFakeHitbox()
+    if not getgenv().Toggles.FakeHitbox then return end
+    if fakeHitbox then return end
+    fakeHitbox = Instance.new("Part")
+    fakeHitbox.Name = "FakeHitbox"
+    fakeHitbox.Size = Vector3.new(5, 7, 5)
+    fakeHitbox.Transparency = 1
+    fakeHitbox.Anchored = true
+    fakeHitbox.CanCollide = false
+    fakeHitbox.Position = LocalPlayer.Character.HumanoidRootPart.Position
+    fakeHitbox.Parent = workspace
 
-                -- Predict the target's future position
-                local predictedPosition = targetHead.Position + targetVelocity * predictionTime
+    RunService.Heartbeat:Connect(function()
+        if fakeHitbox and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            fakeHitbox.Position = LocalPlayer.Character.HumanoidRootPart.Position
+        end
+    end)
+end
 
-                -- Aim at the predicted position
-                local direction = (predictedPosition - myHead.Position).Unit
-                local desiredCFrame = CFrame.new(Camera.CFrame.Position, myHead.Position + direction)
+local function DisableFakeHitbox()
+    if fakeHitbox then
+        fakeHitbox:Destroy()
+        fakeHitbox = nil
+    end
+end
 
-                -- Smooth the transition using Lerp
-                Camera.CFrame = Camera.CFrame:Lerp(desiredCFrame, smoothingSpeed)
-            end
-        end)
-    else
-        if aimbotConnection then aimbotConnection:Disconnect() end
-        textButton.Text = "Lock Aimbot"
-        print("Aimbot OFF")
+local function ApplyShake(camera, intensity)
+    local shake = function() return (math.random() - 0.5) * intensity end
+    camera.CFrame = camera.CFrame * CFrame.new(shake(), shake(), shake())
+end
+
+-- Camlock logic
+local Camlock = {
+    State = false,
+    Enemy = nil
+}
+
+RunService.Heartbeat:Connect(function()
+    AutoReload()
+    NoSlowDown()
+
+    if Camlock.State and Camlock.Enemy and Camlock.Enemy:IsDescendantOf(workspace) then
+        local predicted = Camlock.Enemy.Position + Camlock.Enemy.Velocity * getgenv().Bate.Prediction.Amount
+        local newCFrame = CFrame.new(Camera.CFrame.Position, predicted)
+        Camera.CFrame = newCFrame
+
+        if getgenv().Toggles.Shake then
+            ApplyShake(Camera, getgenv().Bate.Prediction.Smoothness.Shake)
+        end
+        if getgenv().Toggles.JumpOffset then
+            JumpOffset(Camlock.Enemy)
+        end
+    elseif Camlock.State then
+        Camlock.Enemy = FindNearestEnemy()
     end
 end)
 
+-- GUI
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "AimbotGUI"
 
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 180, 0, 50)
+button.Position = UDim2.new(0.5, -90, 0.8, 0)
+button.Text = "Toggle Camlock"
+button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Font = Enum.Font.GothamBold
+button.TextSize = 22
+button.Draggable = true
+button.Parent = gui
 
+local corner = Instance.new("UICorner", button)
+corner.CornerRadius = UDim.new(0, 12)
+
+button.MouseButton1Click:Connect(function()
+    Camlock.State = not Camlock.State
+    button.Text = Camlock.State and "Camlock ON" or "Camlock OFF"
+
+    if Camlock.State then
+        Camlock.Enemy = FindNearestEnemy()
+        EnableFakeHitbox()
+    else
+        DisableFakeHitbox()
+    end
+end)
 
