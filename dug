@@ -1,20 +1,18 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- Create GUI
+-- GUI Setup
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CameraLockGUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- Create Button
 local textButton = Instance.new("TextButton")
 textButton.Name = "LockButton"
 textButton.Size = UDim2.new(0, 200, 0, 50)
 textButton.Position = UDim2.new(0.5, -100, 0.5, -25)
-textButton.Text = "Lock Camera"
+textButton.Text = "Lock into Player"
 textButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 textButton.TextColor3 = Color3.new(1, 1, 1)
 textButton.Font = Enum.Font.SourceSans
@@ -29,71 +27,53 @@ uiCorner.Parent = textButton
 
 -- State
 local isLocked = false
-local lockedTarget = nil
-local followConnection = nil
+local lockedPlayer = nil
 
 -- Find nearest player
 local function getNearestPlayer()
 	local myChar = LocalPlayer.Character
 	if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
 
-	local closestPlayer = nil
-	local shortestDistance = math.huge
+	local closest = nil
+	local shortestDist = math.huge
 
-	for _, player in ipairs(Players:GetPlayers()) do
+	for _, player in pairs(Players:GetPlayers()) do
 		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-			local distance = (myChar.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
-			if distance < shortestDistance then
-				shortestDistance = distance
-				closestPlayer = player
+			local dist = (myChar.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+			if dist < shortestDist then
+				shortestDist = dist
+				closest = player
 			end
 		end
 	end
 
-	return closestPlayer
+	return closest
 end
 
--- Toggle tracking
+-- Button click to toggle lock
 textButton.MouseButton1Click:Connect(function()
 	if not isLocked then
-		local targetPlayer = getNearestPlayer()
-		if not (targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart")) then
-			warn("No valid player to lock on.")
-			return
+		local target = getNearestPlayer()
+		if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+			Camera.CameraSubject = target.Character:FindFirstChild("Humanoid")
+			Camera.CameraType = Enum.CameraType.Custom -- You can try Attach or Follow for different styles
+			isLocked = true
+			lockedPlayer = target
+			textButton.Text = "Unlock Camera"
+			print("Camera locked into: " .. target.Name)
+		else
+			warn("No valid player to lock into.")
 		end
-
-		lockedTarget = targetPlayer
-		isLocked = true
-		textButton.Text = "Unlock Camera"
-		Camera.CameraType = Enum.CameraType.Scriptable
-
-		local smoothSpeed = 0.1 -- lower = slower smoothing
-		local predictionTime = 0.2 -- seconds into the future
-
-		followConnection = RunService.RenderStepped:Connect(function(dt)
-			if lockedTarget and lockedTarget.Character and lockedTarget.Character:FindFirstChild("HumanoidRootPart") then
-				local root = lockedTarget.Character.HumanoidRootPart
-				local velocity = root.Velocity
-
-				-- Predict future position
-				local predictedPosition = root.Position + (velocity * predictionTime)
-				local cameraOffset = Vector3.new(0, 6, -12)
-				local cameraGoal = CFrame.new(predictedPosition + cameraOffset, predictedPosition)
-
-				-- Smooth transition
-				Camera.CFrame = Camera.CFrame:Lerp(cameraGoal, smoothSpeed)
-			end
-		end)
-
-		print("Camera locked on: " .. targetPlayer.Name)
-
 	else
-		-- Unlock
+		if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+			Camera.CameraSubject = LocalPlayer.Character:FindFirstChild("Humanoid")
+			Camera.CameraType = Enum.CameraType.Custom
+		end
 		isLocked = false
-		if followConnection then followConnection:Disconnect() end
-		Camera.CameraType = Enum.CameraType.Custom
-		textButton.Text = "Lock Camera"
+		lockedPlayer = nil
+		textButton.Text = "Lock into Player"
 		print("Camera unlocked.")
 	end
 end)
+
 
