@@ -1,23 +1,22 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- GUI Setup
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "CameraLockGUI"
+-- UI Button Setup
+local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+screenGui.Name = "AimbotLockGUI"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local textButton = Instance.new("TextButton")
-textButton.Name = "LockButton"
 textButton.Size = UDim2.new(0, 200, 0, 50)
-textButton.Position = UDim2.new(0.5, -100, 0.5, -25)
-textButton.Text = "Lock into Player"
-textButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+textButton.Position = UDim2.new(0.5, -100, 0.9, -25)
+textButton.Text = "Lock Aimbot"
+textButton.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
 textButton.TextColor3 = Color3.new(1, 1, 1)
-textButton.Font = Enum.Font.SourceSans
-textButton.TextSize = 24
-textButton.Active = true
+textButton.Font = Enum.Font.SourceSansBold
+textButton.TextSize = 22
 textButton.Draggable = true
 textButton.Parent = screenGui
 
@@ -25,21 +24,27 @@ local uiCorner = Instance.new("UICorner")
 uiCorner.CornerRadius = UDim.new(0, 12)
 uiCorner.Parent = textButton
 
--- State
-local isLocked = false
-local lockedPlayer = nil
+-- Aimbot State
+local isAimbotOn = false
+local aimbotConnection = nil
 
--- Find nearest player
+-- SETTINGS
+local predictionTime = 0.15
+local smoothingSpeed = 0.15
+
+-- Find nearest player to aim at
 local function getNearestPlayer()
 	local myChar = LocalPlayer.Character
-	if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+	if not myChar or not myChar:FindFirstChild("Head") then return nil end
 
+	local myPos = myChar.Head.Position
 	local closest = nil
 	local shortestDist = math.huge
 
 	for _, player in pairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-			local dist = (myChar.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+			local head = player.Character.Head
+			local dist = (myPos - head.Position).Magnitude
 			if dist < shortestDist then
 				shortestDist = dist
 				closest = player
@@ -50,30 +55,35 @@ local function getNearestPlayer()
 	return closest
 end
 
--- Button click to toggle lock
+-- Toggle Button
 textButton.MouseButton1Click:Connect(function()
-	if not isLocked then
-		local target = getNearestPlayer()
-		if target and target.Character and target.Character:FindFirstChild("Humanoid") then
-			Camera.CameraSubject = target.Character:FindFirstChild("Humanoid")
-			Camera.CameraType = Enum.CameraType.Custom -- You can try Attach or Follow for different styles
-			isLocked = true
-			lockedPlayer = target
-			textButton.Text = "Unlock Camera"
-			print("Camera locked into: " .. target.Name)
-		else
-			warn("No valid player to lock into.")
-		end
+	isAimbotOn = not isAimbotOn
+
+	if isAimbotOn then
+		textButton.Text = "Unlock Aimbot"
+		print("Aimbot ON")
+
+		aimbotConnection = RunService.RenderStepped:Connect(function()
+			local target = getNearestPlayer()
+			local char = LocalPlayer.Character
+			if target and target.Character and target.Character:FindFirstChild("Head") and char and char:FindFirstChild("Head") then
+				local myHead = char.Head
+				local targetHead = target.Character.Head
+				local velocity = targetHead.Velocity
+				local predictedPosition = targetHead.Position + velocity * predictionTime
+
+				local direction = (predictedPosition - myHead.Position).Unit
+				local desiredCFrame = CFrame.new(Camera.CFrame.Position, myHead.Position + direction)
+
+				Camera.CFrame = Camera.CFrame:Lerp(desiredCFrame, smoothingSpeed)
+			end
+		end)
 	else
-		if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-			Camera.CameraSubject = LocalPlayer.Character:FindFirstChild("Humanoid")
-			Camera.CameraType = Enum.CameraType.Custom
-		end
-		isLocked = false
-		lockedPlayer = nil
-		textButton.Text = "Lock into Player"
-		print("Camera unlocked.")
+		if aimbotConnection then aimbotConnection:Disconnect() end
+		textButton.Text = "Lock Aimbot"
+		print("Aimbot OFF")
 	end
 end)
+
 
 
