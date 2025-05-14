@@ -1,35 +1,110 @@
-local screenGui = Instance.new("ScreenGui", gethui and gethui() or game.CoreGui)
-screenGui.Name = "screenGui"
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
 
-local textbutton = Instance.new("TextButton", screenGui)
-textbutton.Name = "textbutton"
-textbutton.Text = "Skidder.cc"
-textbutton.Size = UDim2.new(0, 120, 0, 40)
-textbutton.Position = UDim2.new(0, 30, 0, 30)
-textbutton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-textbutton.TextScaled = true
-textbutton.TextColor3 = Color3.fromRGB(0, 0, 0)
-textbutton.Font = Enum.Font.GothamBold
-textbutton.Active = true
-textbutton.Draggable = true
+-- UI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CamlockUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = game.CoreGui
 
-local UICorner = Instance.new("UICorner", textbutton)
-UICorner.CornerRadius = UDim.new(0, 10)
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(0, 120, 0, 40)
+btn.Position = UDim2.new(0, 30, 0, 30)
+btn.Text = "Camlock: OFF"
+btn.TextScaled = true
+btn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+btn.TextColor3 = Color3.fromRGB(0, 0, 0)
+btn.Font = Enum.Font.GothamBold
+btn.Draggable = true
+btn.Active = true
+btn.Parent = screenGui
 
--- Toggle State
-local speedEnabled = false
+local btncorner = Instance.new("UICorner", btn)
+btncorner.CornerRadius = UDim.new(0, 10)
 
-textbutton.MouseButton1Click:Connect(function()
-	local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
-	if humanoid then
-		speedEnabled = not speedEnabled
-		if speedEnabled then
-			humanoid.WalkSpeed = 100
-			textbutton.Text = "Speed: ON"
-		else
-			humanoid.WalkSpeed = 16 -- default walk speed
-			textbutton.Text = "Speed: OFF"
+-- Camlock Settings
+local camlockEnabled = false
+local currentTarget = nil
+local range = 3000
+local prediction = 0.165  -- Adjusted for Da Strike speed
+local smoothness = 0.1    -- Lower = faster lock-on
+
+-- Notify function
+local function notify(title, text)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = title,
+			Text = text,
+			Duration = 3,
+			Icon = "rbxassetid://9478562327"
+		})
+	end)
+end
+
+-- Get closest player to cursor
+local function getClosestToCursor()
+	local closestPlayer = nil
+	local shortestDistance = math.huge
+	local screenCenter = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+		and Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+		or Vector2.new(Mouse.X, Mouse.Y)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local targetPart = player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Head")
+			if targetPart then
+				local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+				local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+				local worldDist = (Camera.CFrame.Position - targetPart.Position).Magnitude
+
+				if onScreen and dist < shortestDistance and worldDist <= range then
+					shortestDistance = dist
+					closestPlayer = player
+				end
+			end
 		end
+	end
+
+	return closestPlayer
+end
+
+-- Main Camlock loop
+RunService.RenderStepped:Connect(function()
+	if camlockEnabled and currentTarget and currentTarget.Character then
+		local targetPart = currentTarget.Character:FindFirstChild("UpperTorso") or currentTarget.Character:FindFirstChild("Head")
+		if targetPart then
+			local predictedPosition = targetPart.Position + (targetPart.Velocity * prediction)
+			local camPos = Camera.CFrame.Position
+			local dir = (predictedPosition - camPos).Unit
+			local newLookVector = Camera.CFrame.LookVector:Lerp(dir, math.clamp(smoothness, 0, 1))
+			Camera.CFrame = CFrame.new(camPos, camPos + newLookVector)
+		end
+	end
+end)
+
+-- Toggle Button Function
+btn.MouseButton1Click:Connect(function()
+	if not camlockEnabled then
+		currentTarget = getClosestToCursor()
+		if currentTarget then
+			camlockEnabled = true
+			btn.Text = "Camlock: ON"
+			btn.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+			notify("Skidder.cc Camlock", "Locked onto: " .. currentTarget.Name)
+		else
+			notify("Skidder.cc Camlock", "No target near cursor.")
+		end
+	else
+		camlockEnabled = false
+		currentTarget = nil
+		btn.Text = "Camlock: OFF"
+		btn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+		notify("Skidder.cc Camlock", "Camlock disabled.")
 	end
 end)
 print("Hi")
