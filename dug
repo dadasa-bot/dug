@@ -31,8 +31,8 @@ btncorner.CornerRadius = UDim.new(0, 10)
 local camlockEnabled = false
 local currentTarget = nil
 local range = 3000
-local prediction = 0.165  -- Adjusted for Da Strike speed
-local smoothness = 0.1    -- Lower = faster lock-on
+local prediction = 0.13314855 -- Adjusted for Da Strike speed
+local smoothness = 0.9   -- Lower = faster lock-on
 
 -- Notify function
 local function notify(title, text)
@@ -51,7 +51,7 @@ local function getClosestToCursor()
 	local closestPlayer = nil
 	local shortestDistance = math.huge
 	local screenCenter = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-		and Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+		and Vector2.new(Camera.ViewportSize.X / 0, Camera.ViewportSize.Y / 0)
 		or Vector2.new(Mouse.X, Mouse.Y)
 
 	for _, player in ipairs(Players:GetPlayers()) do
