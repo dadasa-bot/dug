@@ -1,17 +1,18 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
+
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
 -- UI Setup
-local screenGui = Instance.new("ScreenGui")
+local screenGui = Instance.new("ScreenGui", game.CoreGui)
 screenGui.Name = "CamlockUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = game.CoreGui
 
+-- Camlock Button
 local btn = Instance.new("TextButton")
 btn.Size = UDim2.new(0, 120, 0, 40)
 btn.Position = UDim2.new(0, 30, 0, 30)
@@ -22,25 +23,42 @@ btn.TextColor3 = Color3.fromRGB(0, 0, 0)
 btn.Font = Enum.Font.GothamBold
 btn.Draggable = true
 btn.Active = true
+btn.AutoButtonColor = false
 btn.Parent = screenGui
 
-local btncorner = Instance.new("UICorner", btn)
-btncorner.CornerRadius = UDim.new(0, 10)
+local btnCorner = Instance.new("UICorner", btn)
+btnCorner.CornerRadius = UDim.new(0, 10)
+
+-- Tween Functions
+local function tweenColor(button, color)
+	TweenService:Create(button, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundColor3 = color
+	}):Play()
+end
+
+local function tweenScale(button)
+	local tweenGrow = TweenService:Create(button, TweenInfo.new(0.1), { Size = UDim2.new(0, 125, 0, 45) })
+	local tweenShrink = TweenService:Create(button, TweenInfo.new(0.1), { Size = UDim2.new(0, 120, 0, 40) })
+	tweenGrow:Play()
+	tweenGrow.Completed:Connect(function()
+		tweenShrink:Play()
+	end)
+end
 
 -- Camlock Settings
 local camlockEnabled = false
 local currentTarget = nil
-local range = 3000
-local prediction = 0.13314855 -- Adjusted for Da Strike speed
-local smoothness = 0.9   -- Lower = faster lock-on
+local range = 10000
+local prediction = 0.5  -- Default prediction value
+local smoothness = 0.9  -- Default smoothness value
 
--- Notify function
+-- Notification function
 local function notify(title, text)
 	pcall(function()
 		StarterGui:SetCore("SendNotification", {
 			Title = title,
 			Text = text,
-			Duration = 3,
+			Duration = 4,
 			Icon = "rbxassetid://9478562327"
 		})
 	end)
@@ -49,23 +67,21 @@ end
 -- Get closest player to cursor
 local function getClosestToCursor()
 	local closestPlayer = nil
-	local shortestDistance = math.huge
-	local screenCenter = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-		and Vector2.new(Camera.ViewportSize.X / 0, Camera.ViewportSize.Y / 0)
+	local closestDist = math.huge
+	local mousePos = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+		and Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 		or Vector2.new(Mouse.X, Mouse.Y)
 
 	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character then
-			local targetPart = player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Head")
-			if targetPart then
-				local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-				local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-				local worldDist = (Camera.CFrame.Position - targetPart.Position).Magnitude
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local hrp = player.Character.HumanoidRootPart
+			local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+			local distanceFromCursor = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+			local worldDistance = (Camera.CFrame.Position - hrp.Position).Magnitude
 
-				if onScreen and dist < shortestDistance and worldDist <= range then
-					shortestDistance = dist
-					closestPlayer = player
-				end
+			if onScreen and distanceFromCursor < closestDist and worldDistance <= range then
+				closestDist = distanceFromCursor
+				closestPlayer = player
 			end
 		end
 	end
@@ -73,38 +89,39 @@ local function getClosestToCursor()
 	return closestPlayer
 end
 
--- Main Camlock loop
+-- Main Camera Lock Logic
 RunService.RenderStepped:Connect(function()
-	if camlockEnabled and currentTarget and currentTarget.Character then
-		local targetPart = currentTarget.Character:FindFirstChild("UpperTorso") or currentTarget.Character:FindFirstChild("Head")
-		if targetPart then
-			local predictedPosition = targetPart.Position + (targetPart.Velocity * prediction)
-			local camPos = Camera.CFrame.Position
-			local dir = (predictedPosition - camPos).Unit
-			local newLookVector = Camera.CFrame.LookVector:Lerp(dir, math.clamp(smoothness, 0, 1))
-			Camera.CFrame = CFrame.new(camPos, camPos + newLookVector)
-		end
+	if camlockEnabled and currentTarget and currentTarget.Character and currentTarget.Character:FindFirstChild("HumanoidRootPart") then
+		local hrp = currentTarget.Character.HumanoidRootPart
+		local predictedPosition = hrp.Position + (hrp.Velocity * prediction)
+		local camPos = Camera.CFrame.Position
+		local direction = (predictedPosition - camPos).Unit
+		local lerpedDir = Camera.CFrame.LookVector:Lerp(direction, math.clamp(smoothness, 0, 1))
+		Camera.CFrame = CFrame.new(camPos, camPos + lerpedDir)
 	end
 end)
 
--- Toggle Button Function
+-- Toggle Camlock
 btn.MouseButton1Click:Connect(function()
+	tweenScale(btn)
+
 	if not camlockEnabled then
 		currentTarget = getClosestToCursor()
 		if currentTarget then
 			camlockEnabled = true
 			btn.Text = "Camlock: ON"
-			btn.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+			tweenColor(btn, Color3.fromRGB(0, 255, 0))
 			notify("Skidder.cc Camlock", "Locked onto: " .. currentTarget.Name)
 		else
-			notify("Skidder.cc Camlock", "No target near cursor.")
+			btn.Text = "Camlock: OFF"
+			tweenColor(btn, Color3.fromRGB(255, 0, 0))
+			notify("Skidder.cc Camlock", "No player found near mouse/camera.")
 		end
 	else
 		camlockEnabled = false
 		currentTarget = nil
 		btn.Text = "Camlock: OFF"
-		btn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+		tweenColor(btn, Color3.fromRGB(255, 0, 0))
 		notify("Skidder.cc Camlock", "Camlock disabled.")
 	end
 end)
-print("Hi")
