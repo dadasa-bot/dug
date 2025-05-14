@@ -1,1 +1,35 @@
-print("nigga")
+local screenGui = Instance.new("ScreenGui", gethui and gethui() or game.CoreGui)
+screenGui.Name = "screenGui"
+
+local textbutton = Instance.new("TextButton", screenGui)
+textbutton.Name = "textbutton"
+textbutton.Text = "Skidder.cc"
+textbutton.Size = UDim2.new(0, 120, 0, 40)
+textbutton.Position = UDim2.new(0, 30, 0, 30)
+textbutton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+textbutton.TextScaled = true
+textbutton.TextColor3 = Color3.fromRGB(0, 0, 0)
+textbutton.Font = Enum.Font.GothamBold
+textbutton.Active = true
+textbutton.Draggable = true
+
+local UICorner = Instance.new("UICorner", textbutton)
+UICorner.CornerRadius = UDim.new(0, 10)
+
+-- Toggle State
+local speedEnabled = false
+
+textbutton.MouseButton1Click:Connect(function()
+	local humanoid = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+	if humanoid then
+		speedEnabled = not speedEnabled
+		if speedEnabled then
+			humanoid.WalkSpeed = 100
+			textbutton.Text = "Speed: ON"
+		else
+			humanoid.WalkSpeed = 16 -- default walk speed
+			textbutton.Text = "Speed: OFF"
+		end
+	end
+end)
+print("Hi")
